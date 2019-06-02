@@ -4,6 +4,7 @@
 """
 $ python2.7 smb_exploit.py 192.168.206.152
 [+] [192.168.206.152] is likely VULNERABLE to MS17-010! (Windows 7 Ultimate 7600)
+
 $ python2.7 smb_exploit.py 192.168.206.130
 [+] [192.168.206.130] is likely VULNERABLE to MS17-010! (Windows 5.1)
 """
@@ -434,3 +435,4 @@ if __name__ == '__main__':
 # https://github.com/countercept/doublepulsar-detection-script/blob/master/detect_doublepulsar_smb.py
 # http://stackoverflow.com/questions/38735421/packing-an-integer-number-to-3-bytes-in-python
 # https://zerosum0x0.blogspot.com/2017/04/doublepulsar-initial-smb-backdoor-ring.html
+# https://github.com/worawit/MS17-010/blob/master/BUG.txt
